@@ -8,6 +8,7 @@ from src.evaluation.dense import DenseEvaluator
 _EVALUATOR_MAP = {
     "colsmol": ColSmolEvaluator,
     "biomedclip": DenseEvaluator,
+    "conch": DenseEvaluator,
 }
 
 
@@ -25,7 +26,7 @@ def evaluate(
     """Run retrieval evaluation for a given model type.
 
     Args:
-        model_type: one of "colsmol", "biomedclip"
+        model_type: one of "colsmol", "biomedclip", "conch"
         query_embs: embeddings for queries
         doc_embs:   embeddings for docs
         query_ids:  ordered query ID strings

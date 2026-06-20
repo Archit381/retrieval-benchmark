@@ -34,7 +34,13 @@ class ConchEmbedder(BaseEmbedder):
             f"hf_hub:{self.model_name}",
             hf_auth_token=self.hf_auth_token,
         )
-        self._tokenizer = get_tokenizer()
+
+        tokenizer = get_tokenizer()
+
+        if not hasattr(tokenizer, "batch_encode_plus"):
+            tokenizer.batch_encode_plus = tokenizer
+
+        self._tokenizer = tokenizer
         self._tokenize_fn = tokenize
         self._model = self._model.to(self.device).eval()
 
