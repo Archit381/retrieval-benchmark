@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import psutil
 import time
 import os
+import numpy as np
 import torch
 from PIL import Image as PILImage
 import io
@@ -131,6 +132,75 @@ def print_embedding_output(out: EmbeddingOutput, title: str = "") -> None:
             table.add_row(k, str(v))
 
     console.print(table)
+
+
+_PRETTY_NAMES: dict[str, str] = {
+    "colsmol":    "ColSmol-500M",
+    "biomedclip": "BiomedCLIP",
+    "conch":      "CONCH",
+    "pubmedclip": "PubMedCLIP",
+}
+
+
+def compare_ndcg(
+    eval_results: dict[str, dict],
+    cutoff: int = 5,
+    pretty_names: dict[str, str] | None = None,
+    save_dir: str | None = None,
+) -> "Any":
+    """Paper-ready NDCG comparison table.
+
+    Args:
+        eval_results:  {model_type: result_dict} from evaluation_factory.evaluate()
+        cutoff:        NDCG cutoff (label only)
+        pretty_names:  optional display name overrides keyed by model_type
+        save_dir:      if set, writes ndcg.tex here
+
+    Returns:
+        pandas DataFrame with one row per model
+    """
+    import os
+    import pandas as pd
+    from IPython.display import display
+
+    names  = {**_PRETTY_NAMES, **(pretty_names or {})}
+    metric = f"nDCG@{cutoff}"
+
+    per_query: dict[str, np.ndarray] = {
+        names.get(mt, mt): np.asarray(res["ndcg"])
+        for mt, res in eval_results.items()
+    }
+    model_order = sorted(per_query, key=lambda m: per_query[m].mean(), reverse=True)
+    best_model  = model_order[0]
+    best_mean   = float(per_query[best_model].mean())
+
+    def fmt_cell(val: float, base: float) -> str:
+        gain = 100.0 * (val - base) / max(base, 1e-9)
+        return f"{val:.3f} ({gain:+.1f}\\%)"
+
+    ndcg_data = {
+        m: (f"{per_query[m].mean():.3f}" if m == best_model
+            else fmt_cell(float(per_query[m].mean()), best_mean))
+        for m in model_order
+    }
+
+    ndcg_df = pd.DataFrame(ndcg_data, index=[metric]).T
+    ndcg_df.index.name = "Model"
+
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        tex = ndcg_df.to_latex(
+            escape=False,
+            column_format="l" + "r" * len(ndcg_df.columns),
+            caption=f"{metric} scores. Percentages are relative gains over best model ({best_model}).",
+            label=f"tab:ndcg{cutoff}",
+        )
+        with open(f"{save_dir}/ndcg.tex", "w") as f:
+            f.write(tex)
+
+    print(f"\n================ {metric} ================")
+    display(ndcg_df)
+    return ndcg_df
 
 
 def _decode_hf_image(img) -> PILImage.Image:
