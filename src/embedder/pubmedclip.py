@@ -25,7 +25,7 @@ class PubMedCLIPEmbedder(BaseEmbedder):
     @torch.no_grad()
     def _encode_text(self, texts: list[str]) -> torch.Tensor:
         inputs = self._processor(
-            text=texts, return_tensors="pt", padding=True, truncation=True
+            text=texts, return_tensors="pt", padding=True, truncation=True, max_length=77
         ).to(self.device)
         outputs = self._model.get_text_features(
             input_ids=inputs["input_ids"],
