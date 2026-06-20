@@ -1,7 +1,8 @@
 from src.embedder import (
   BaseEmbedder,
   ColSmolEmbedder,
-  BiomedCLIPEmbedder
+  BiomedCLIPEmbedder,
+  ConchEmbedder,
 )
 
 from typing import Optional, Any, Union
@@ -25,7 +26,8 @@ class EmbeddingFactory:
     SUPPORT_MAP: dict[str, tuple[type[BaseEmbedder], dict, set[str]]] = {
         "vidore/colSmol-500M": (ColSmolEmbedder, {}, {"text", "image"}),
         # "nvidia/MM-Embed":     (MMEmbedEmbedder, {}, {"text", "image"}),
-        "microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224":     (BiomedCLIPEmbedder, {}, {"text", "image"}),
+        "microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224": (BiomedCLIPEmbedder, {}, {"text", "image"}),
+        "MahmoodLab/conch": (ConchEmbedder, {}, {"text", "image"}),
     }
 
     def __init__(self, device: Optional[str] = None, dtype: Any = None):
