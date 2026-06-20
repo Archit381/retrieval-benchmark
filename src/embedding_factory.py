@@ -6,7 +6,7 @@ from src.embedder import (
 
 from typing import Optional, Any, Union
 from tqdm.auto import tqdm
-from schema import EmbeddingOutput
+from src.core.schema import EmbeddingOutput
 from src.core.utils import _get_progress
 
 
