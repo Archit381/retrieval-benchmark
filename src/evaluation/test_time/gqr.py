@@ -327,6 +327,6 @@ class GQRMethod(BaseTestTimeMethod):
             trajectory=trajectory,
             feedback_idx=feedback_idx,
             pos_idx=pos_idx,
-            title=f"GQR Query Trajectory  [qid={qid[:30]}]",
+            title=f"GQR Query Trajectory  [qid={qid[:30].replace('$', '')}]",
             save_path=save_path,
         )
