@@ -9,6 +9,7 @@ _EVALUATOR_MAP = {
     "colsmol": ColSmolEvaluator,
     "biomedclip": DenseEvaluator,
     "conch": DenseEvaluator,
+    "pubmedclip": DenseEvaluator,
 }
 
 

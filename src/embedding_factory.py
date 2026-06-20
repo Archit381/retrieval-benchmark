@@ -3,6 +3,7 @@ from src.embedder import (
   ColSmolEmbedder,
   BiomedCLIPEmbedder,
   ConchEmbedder,
+  PubMedCLIPEmbedder,
 )
 
 from typing import Optional, Any, Union
@@ -28,6 +29,7 @@ class EmbeddingFactory:
         # "nvidia/MM-Embed":     (MMEmbedEmbedder, {}, {"text", "image"}),
         "microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224": (BiomedCLIPEmbedder, {}, {"text", "image"}),
         "MahmoodLab/conch": (ConchEmbedder, {}, {"text", "image"}),
+        "flaviagiammarino/pubmed-clip-vit-base-patch32": (PubMedCLIPEmbedder, {}, {"text", "image"}),
     }
 
     def __init__(self, device: Optional[str] = None, dtype: Any = None):
