@@ -11,7 +11,7 @@ import pyarrow.parquet as pq
 
 from src.core.artifacts_io import save_multi_vector, save_single_vector
 from src.core.manifest import Manifest, SetInfo
-from schema import EmbeddingOutput
+from src.core.schema import EmbeddingOutput
 
 
 def _pick_emb(out: EmbeddingOutput) -> Any:
