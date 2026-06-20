@@ -4,8 +4,6 @@ from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
-from tqdm import tqdm
-
 from src.evaluation.base import BaseEvaluator
 from src.evaluation.test_time.base import BaseTestTimeMethod
 
@@ -68,8 +66,8 @@ def guided_query_refinement(
             [d.to(device) for d in doc_emb_main], batch_first=True
         )
 
-    query_bar = tqdm(range(n_queries), desc="GQR queries", unit="q")
-    for i in query_bar:
+    for i in range(n_queries):
+        print(f"[GQR] query {i+1}/{n_queries}")
         opt = torch.optim.Adam([qs[i]], lr=lr)
 
         idx_main     = top_idx_main[i]
@@ -82,8 +80,7 @@ def guided_query_refinement(
         d_feedback = sim_feedback[i].index_select(0, u)
         mixture = torch.softmax((d_main + d_feedback) / 2, dim=-1).detach().to(device)
 
-        step_bar = tqdm(range(n_steps), desc=f"  q{i} steps", unit="step", leave=False)
-        for step in step_bar:
+        for step in range(n_steps):
             pred = sim_func(qs[i], docs_u).to(device)
             loss = F.kl_div(
                 torch.log_softmax(pred, dim=-1),
@@ -93,7 +90,7 @@ def guided_query_refinement(
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
-            step_bar.set_postfix(loss=f"{loss.item():.4f}")
+            print(f"  step {step+1}/{n_steps}  loss={loss.item():.6f}")
 
     if is_list:
         return [qs[i].detach().squeeze(0).cpu() for i in range(n_queries)]
