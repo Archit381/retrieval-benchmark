@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from src.evaluation.base import BaseEvaluator
 from src.evaluation.test_time.base import BaseTestTimeMethod
@@ -49,6 +50,9 @@ def guided_query_refinement(
     is_list = isinstance(query_emb_main, list)
     n_queries = len(query_emb_main)
 
+    sim_main     = sim_main.to(device)
+    sim_feedback = sim_feedback.to(device)
+
     _, top_idx_main     = torch.topk(sim_main,     k=k, dim=-1)
     _, top_idx_feedback = torch.topk(sim_feedback, k=k, dim=-1)
 
@@ -64,7 +68,8 @@ def guided_query_refinement(
             [d.to(device) for d in doc_emb_main], batch_first=True
         )
 
-    for i in range(n_queries):
+    query_bar = tqdm(range(n_queries), desc="GQR queries", unit="q")
+    for i in query_bar:
         opt = torch.optim.Adam([qs[i]], lr=lr)
 
         idx_main     = top_idx_main[i]
@@ -77,7 +82,8 @@ def guided_query_refinement(
         d_feedback = sim_feedback[i].index_select(0, u)
         mixture = torch.softmax((d_main + d_feedback) / 2, dim=-1).detach().to(device)
 
-        for _ in range(n_steps):
+        step_bar = tqdm(range(n_steps), desc=f"  q{i} steps", unit="step", leave=False)
+        for step in step_bar:
             pred = sim_func(qs[i], docs_u).to(device)
             loss = F.kl_div(
                 torch.log_softmax(pred, dim=-1),
@@ -87,6 +93,7 @@ def guided_query_refinement(
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
+            step_bar.set_postfix(loss=f"{loss.item():.4f}")
 
     if is_list:
         return [qs[i].detach().squeeze(0).cpu() for i in range(n_queries)]
@@ -139,8 +146,8 @@ class GQRMethod(BaseTestTimeMethod):
         self,
         query_emb_main: Any,
         doc_emb_main: Any,
-        primary_result: dict,
-        feedback_result: dict,
+        sim_main: Any,
+        sim_feedback: Any,
         query_ids: list[str],
         doc_ids: list[str],
         qrels: dict[str, dict[str, int]],
@@ -148,8 +155,8 @@ class GQRMethod(BaseTestTimeMethod):
         refined = guided_query_refinement(
             query_emb_main=query_emb_main,
             doc_emb_main=doc_emb_main,
-            sim_main=primary_result["similarity_matrix"],
-            sim_feedback=feedback_result["similarity_matrix"],
+            sim_main=sim_main,
+            sim_feedback=sim_feedback,
             sim_func=self.sim_func,
             lr=self.lr,
             n_steps=self.n_steps,

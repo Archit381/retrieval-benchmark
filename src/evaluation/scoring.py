@@ -54,7 +54,7 @@ def score_multi_vector(
     Returns [Nq, Nd] float32.
     """
     Nq, Nd = len(query_embs), len(doc_embs)
-    scores = torch.zeros(Nq, Nd, dtype=torch.float32)
+    scores = torch.zeros(Nq, Nd, dtype=torch.float32, device=device)
 
     # pre-normalize docs once
     d_norms = [_l2_norm(d.to(device).float()) for d in doc_embs]

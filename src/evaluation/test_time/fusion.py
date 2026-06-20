@@ -24,6 +24,21 @@ def _eval_ndcg(
     }
 
 
+def _sim_to_retrieval(
+    sim: torch.Tensor,
+    query_ids: list[str],
+    doc_ids: list[str],
+) -> dict[str, dict[str, float]]:
+    sorted_idx  = torch.argsort(sim, dim=-1, descending=True)
+    sorted_vals = torch.gather(sim, 1, sorted_idx)
+    return {
+        query_ids[i]: {doc_ids[j]: float(v) for j, v in zip(idx_row, val_row)}
+        for i, (val_row, idx_row) in enumerate(
+            zip(sorted_vals.cpu().tolist(), sorted_idx.cpu().tolist())
+        )
+    }
+
+
 def _average_rank_fusion(
     results_a: dict[str, dict[str, float]],
     results_b: dict[str, dict[str, float]],
@@ -77,15 +92,15 @@ class AverageRankFusion(BaseTestTimeMethod):
         self,
         _query_emb_main: Any,
         _doc_emb_main: Any,
-        primary_result: dict,
-        feedback_result: dict,
-        _query_ids: list[str],
-        _doc_ids: list[str],
+        sim_main: Any,
+        sim_feedback: Any,
+        query_ids: list[str],
+        doc_ids: list[str],
         qrels: dict[str, dict[str, int]],
     ) -> dict:
         ranked = _average_rank_fusion(
-            primary_result["retrieval_results"],
-            feedback_result["retrieval_results"],
+            _sim_to_retrieval(sim_main,     query_ids, doc_ids),
+            _sim_to_retrieval(sim_feedback, query_ids, doc_ids),
         )
         ndcg = _eval_ndcg(qrels, ranked, self.cutoffs)
         return {
@@ -109,15 +124,15 @@ class AverageScoreFusion(BaseTestTimeMethod):
         self,
         _query_emb_main: Any,
         _doc_emb_main: Any,
-        primary_result: dict,
-        feedback_result: dict,
-        _query_ids: list[str],
-        _doc_ids: list[str],
+        sim_main: Any,
+        sim_feedback: Any,
+        query_ids: list[str],
+        doc_ids: list[str],
         qrels: dict[str, dict[str, int]],
     ) -> dict:
         ranked = _average_score_fusion(
-            primary_result["retrieval_results"],
-            feedback_result["retrieval_results"],
+            _sim_to_retrieval(sim_main,     query_ids, doc_ids),
+            _sim_to_retrieval(sim_feedback, query_ids, doc_ids),
         )
         ndcg = _eval_ndcg(qrels, ranked, self.cutoffs)
         return {

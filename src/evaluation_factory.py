@@ -49,24 +49,23 @@ def apply_test_time_method(
     method: BaseTestTimeMethod,
     query_emb_main: Any,
     doc_emb_main: Any,
-    primary_result: dict,
-    feedback_result: dict,
+    sim_main: Any,
+    sim_feedback: Any,
     query_ids: list[str],
     doc_ids: list[str],
     qrels: dict[str, dict[str, int]],
 ) -> dict:
-    """Apply any test-time method to two existing evaluation results.
+    """Apply any test-time method given two similarity matrices.
 
     Args:
-        method:           An instance of a ``BaseTestTimeMethod`` subclass
-                          (e.g. ``GQRMethod``, ``AverageRankFusion``).
-        query_emb_main:   Primary query embeddings (used by embedding-level methods like GQR).
-        doc_emb_main:     Primary doc embeddings (used by embedding-level methods like GQR).
-        primary_result:   Output of ``evaluate()`` for the primary model.
-        feedback_result:  Output of ``evaluate()`` for the feedback model.
-        query_ids:        Ordered query ID strings.
-        doc_ids:          Ordered doc ID strings.
-        qrels:            {query_id: {doc_id: relevance_int}}
+        method:          An instance of a ``BaseTestTimeMethod`` subclass.
+        query_emb_main:  Primary query embeddings (needed by GQR; pass None for fusion).
+        doc_emb_main:    Primary doc embeddings (needed by GQR; pass None for fusion).
+        sim_main:        [Nq, Nd] similarity matrix from the primary model.
+        sim_feedback:    [Nq, Nd] similarity matrix from the feedback model.
+        query_ids:       Ordered query ID strings.
+        doc_ids:         Ordered doc ID strings.
+        qrels:           {query_id: {doc_id: relevance_int}}
 
     Returns:
         Result dict with the same schema as ``evaluate()``.
@@ -74,8 +73,8 @@ def apply_test_time_method(
     return method.apply(
         query_emb_main=query_emb_main,
         doc_emb_main=doc_emb_main,
-        primary_result=primary_result,
-        feedback_result=feedback_result,
+        sim_main=sim_main,
+        sim_feedback=sim_feedback,
         query_ids=query_ids,
         doc_ids=doc_ids,
         qrels=qrels,

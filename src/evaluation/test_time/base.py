@@ -21,8 +21,8 @@ class BaseTestTimeMethod(ABC):
         self,
         query_emb_main: Any,
         doc_emb_main: Any,
-        primary_result: dict,
-        feedback_result: dict,
+        sim_main: Any,
+        sim_feedback: Any,
         query_ids: list[str],
         doc_ids: list[str],
         qrels: dict[str, dict[str, int]],
@@ -30,15 +30,13 @@ class BaseTestTimeMethod(ABC):
         """Run the test-time method and return an evaluation result dict.
 
         Args:
-            query_emb_main:   Primary query embeddings (list[Tensor] or Tensor).
-            doc_emb_main:     Primary doc embeddings (list[Tensor] or Tensor).
-            primary_result:   Output of ``BaseEvaluator.run()`` for the primary model.
-                              Keys used: ``similarity_matrix``, ``retrieval_results``.
-            feedback_result:  Output of ``BaseEvaluator.run()`` for the feedback model.
-                              Keys used: ``similarity_matrix``, ``retrieval_results``.
-            query_ids:        Ordered query ID strings.
-            doc_ids:          Ordered doc ID strings.
-            qrels:            {query_id: {doc_id: relevance_int}}
+            query_emb_main:  Primary query embeddings (list[Tensor] or Tensor).
+            doc_emb_main:    Primary doc embeddings (list[Tensor] or Tensor).
+            sim_main:        [Nq, Nd] similarity matrix from the primary model.
+            sim_feedback:    [Nq, Nd] similarity matrix from the feedback model.
+            query_ids:       Ordered query ID strings.
+            doc_ids:         Ordered doc ID strings.
+            qrels:           {query_id: {doc_id: relevance_int}}
 
         Returns:
             Result dict matching the schema of ``BaseEvaluator.run()``.
