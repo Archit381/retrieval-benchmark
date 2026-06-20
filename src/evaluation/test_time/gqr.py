@@ -83,6 +83,51 @@ def plot_query_trajectory(
     plt.show()
 
 
+def plot_loss_curves(
+    loss_curves: list[list[float]],
+    save_path: str | None = None,
+) -> None:
+    """Plot per-query KL loss curves on a single axes.
+
+    All query curves are drawn as thin semi-transparent lines coloured by a
+    sequential colormap; a thick mean curve is overlaid on top.
+
+    Args:
+        loss_curves: One list of floats per query (length = n_steps each).
+        save_path:   If given, save PNG here (parent dirs created automatically).
+    """
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    arr   = np.array(loss_curves)          # (Nq, n_steps)
+    steps = np.arange(1, arr.shape[1] + 1)
+    cmap  = plt.get_cmap("cool")
+
+    fig: Any = plt.figure(figsize=(7, 4))
+    ax = fig.add_subplot(111)
+
+    for idx, curve in enumerate(arr):
+        color = cmap(idx / max(len(arr) - 1, 1))
+        ax.plot(steps, curve, lw=0.8, alpha=0.35, color=color)
+
+    mean  = arr.mean(axis=0)
+    ax.plot(steps, mean, lw=2.2, color="#1a237e", label=f"Mean (n={len(arr)})", zorder=5)
+
+    ax.set_xlabel("Optimisation step", fontsize=9)
+    ax.set_ylabel("KL loss", fontsize=9)
+    ax.set_title("GQR optimisation loss per query", fontsize=10)
+    ax.legend(fontsize=8, frameon=False)
+    ax.grid(alpha=0.2)
+    fig.tight_layout()  # type: ignore[union-attr]
+
+    if save_path:
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")  # type: ignore[union-attr]
+        print(f"[GQR] loss curve plot saved → {save_path}")
+    plt.show()
+
+
 def guided_query_refinement(
     query_emb_main: Any,
     doc_emb_main: Any,
@@ -95,6 +140,7 @@ def guided_query_refinement(
     device: str = "cpu",
     trajectory_out: list | None = None,
     trajectory_query_idx: int = 0,
+    loss_curves_out: list | None = None,
 ) -> Any:
     """Refine query embeddings at test time using guidance from a feedback retriever.
 
@@ -121,9 +167,9 @@ def guided_query_refinement(
         trajectory_out:       If a list is passed, the query state for
                               ``trajectory_query_idx`` is appended at the start
                               and after every ``max(1, n_steps//10)`` steps.
-                              Pass an empty list from ``GQRMethod.apply`` to
-                              collect the path for plotting.
         trajectory_query_idx: Which query index to record (default 0).
+        loss_curves_out:      If a list is passed, a list of per-step loss values
+                              is appended for every query (used by plot_loss_curves).
 
     Returns:
         Refined query embeddings in the same format as ``query_emb_main``.
@@ -152,7 +198,6 @@ def guided_query_refinement(
     record_every = max(1, n_steps // 10)
 
     for i in range(n_queries):
-        print(f"[GQR] query {i+1}/{n_queries}")
         opt = torch.optim.Adam([qs[i]], lr=lr)
 
         idx_main     = top_idx_main[i]
@@ -165,10 +210,11 @@ def guided_query_refinement(
         d_feedback = sim_feedback[i].index_select(0, u)
         mixture = torch.softmax((d_main + d_feedback) / 2, dim=-1).detach().to(device)
 
-        record = (trajectory_out is not None and i == trajectory_query_idx)
-        if record and trajectory_out is not None:
+        record_traj = (trajectory_out is not None and i == trajectory_query_idx)
+        if record_traj and trajectory_out is not None:
             trajectory_out.append(_to_dense_numpy(qs[i]))
 
+        losses: list[float] = []
         for step in range(n_steps):
             pred = sim_func(qs[i], docs_u).to(device)
             loss = F.kl_div(
@@ -179,10 +225,17 @@ def guided_query_refinement(
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
-            print(f"  step {step+1}/{n_steps}  loss={loss.item():.6f}")
+            losses.append(loss.item())
 
-            if record and trajectory_out is not None and (step + 1) % record_every == 0:
+            if record_traj and trajectory_out is not None and (step + 1) % record_every == 0:
                 trajectory_out.append(_to_dense_numpy(qs[i]))
+
+        print(
+            f"[GQR] Query {i+1}/{n_queries} | "
+            f"Step 1: {losses[0]:.4f} → Step {n_steps}: {losses[-1]:.4f}"
+        )
+        if loss_curves_out is not None:
+            loss_curves_out.append(losses)
 
     if is_list:
         return [qs[i].detach().squeeze(0).cpu() for i in range(n_queries)]
@@ -215,8 +268,8 @@ class GQRMethod(BaseTestTimeMethod):
         result = gqr.apply(primary_result, feedback_result,
                            query_embs_colsmol, doc_embs_colsmol,
                            query_ids, doc_ids, qrels,
-                           plot_trajectory=True,
-                           trajectory_save_path="results/figures/gqr_trajectory.png")
+                           plot_trajectory=True, plot_losses=True,
+                           plots_save_path="results/figures")
     """
 
     def __init__(
@@ -244,9 +297,11 @@ class GQRMethod(BaseTestTimeMethod):
         qrels: dict[str, dict[str, int]],
         plot_trajectory: bool = False,
         plot_query_idx: int = 0,
-        trajectory_save_path: str | None = None,
+        plot_losses: bool = False,
+        plots_save_path: str | None = None,
     ) -> dict:
-        trajectory: list | None = [] if plot_trajectory else None
+        trajectory:  list | None = [] if plot_trajectory else None
+        loss_curves: list | None = [] if plot_losses     else None
 
         refined = guided_query_refinement(
             query_emb_main=query_emb_main,
@@ -260,14 +315,20 @@ class GQRMethod(BaseTestTimeMethod):
             device=self.primary_evaluator.device,
             trajectory_out=trajectory,
             trajectory_query_idx=plot_query_idx,
+            loss_curves_out=loss_curves,
         )
 
         if plot_trajectory and trajectory:
+            traj_path = f"{plots_save_path}/gqr_trajectory.png" if plots_save_path else None
             self._emit_trajectory_plot(
                 doc_emb_main, sim_main, sim_feedback,
                 query_ids, doc_ids, qrels,
-                trajectory, plot_query_idx, trajectory_save_path,
+                trajectory, plot_query_idx, traj_path,
             )
+
+        if plot_losses and loss_curves:
+            loss_path = f"{plots_save_path}/gqr_losses.png" if plots_save_path else None
+            plot_loss_curves(loss_curves, save_path=loss_path)
 
         new_sim = self.primary_evaluator.score(refined, doc_emb_main)
         ranked  = self.primary_evaluator.retrieve(new_sim, query_ids, doc_ids)
