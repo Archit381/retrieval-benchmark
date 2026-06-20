@@ -11,6 +11,9 @@ def gqr_score_multi_vector(
 ) -> torch.Tensor:
     """Differentiable MaxSim for a single query inside the GQR optimization loop.
 
+    Normalises by the number of query tokens so scores are in [-1, 1],
+    matching the scale of cosine-similarity feedback models.
+
     Args:
         q:    [1, Tq, D] — single query token matrix, may have requires_grad=True
         docs: [Nd, Td, D] — padded doc token matrices
@@ -18,11 +21,11 @@ def gqr_score_multi_vector(
     Returns:
         [Nd] similarity scores (differentiable w.r.t. q)
     """
-    q_n = _l2_norm(q.float())           # [1, Tq, D]
-    d_n = _l2_norm(docs.float())        # [Nd, Td, D]
-    # [1, Tq, D] x [Nd, D, Td] -> [1, Nd, Tq, Td]
-    sim = torch.einsum("qtd,nsd->qnts", q_n, d_n)
-    return sim.max(dim=-1).values.sum(dim=-1).squeeze(0)  # [Nd]
+    q_n   = _l2_norm(q.float())           # [1, Tq, D]
+    d_n   = _l2_norm(docs.float())        # [Nd, Td, D]
+    q_len = q_n.shape[1]                  # number of query tokens
+    sim   = torch.einsum("qtd,nsd->qnts", q_n, d_n)
+    return sim.max(dim=-1).values.sum(dim=-1).squeeze(0) / q_len  # [Nd]
 
 
 def gqr_score_cosine(
@@ -60,10 +63,11 @@ def score_multi_vector(
     d_norms = [_l2_norm(d.to(device).float()) for d in doc_embs]
 
     for i, q in enumerate(query_embs):
-        q_n = _l2_norm(q.to(device).float())       # [Tq, D]
+        q_n   = _l2_norm(q.to(device).float())     # [Tq, D]
+        q_len = q_n.shape[0]                        # number of query tokens
         for j, dn in enumerate(d_norms):
             sim = q_n @ dn.T                        # [Tq, Td]
-            scores[i, j] = sim.max(dim=1).values.sum()
+            scores[i, j] = sim.max(dim=1).values.sum() / q_len
 
     return scores
 

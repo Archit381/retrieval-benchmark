@@ -71,13 +71,9 @@ def apply_test_time_method(
         Result dict with the same schema as ``evaluate()``.
     """
     return method.apply(
-        query_emb_main=query_emb_main,
-        doc_emb_main=doc_emb_main,
-        sim_main=sim_main,
-        sim_feedback=sim_feedback,
-        query_ids=query_ids,
-        doc_ids=doc_ids,
-        qrels=qrels,
+        query_emb_main, doc_emb_main,
+        sim_main, sim_feedback,
+        query_ids, doc_ids, qrels,
     )
 
 
