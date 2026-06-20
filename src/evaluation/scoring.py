@@ -5,6 +5,44 @@ def _l2_norm(x: torch.Tensor) -> torch.Tensor:
     return x / x.norm(dim=-1, keepdim=True).clamp(min=1e-8)
 
 
+def gqr_score_multi_vector(
+    q: torch.Tensor,
+    docs: torch.Tensor,
+) -> torch.Tensor:
+    """Differentiable MaxSim for a single query inside the GQR optimization loop.
+
+    Args:
+        q:    [1, Tq, D] — single query token matrix, may have requires_grad=True
+        docs: [Nd, Td, D] — padded doc token matrices
+
+    Returns:
+        [Nd] similarity scores (differentiable w.r.t. q)
+    """
+    q_n = _l2_norm(q.float())           # [1, Tq, D]
+    d_n = _l2_norm(docs.float())        # [Nd, Td, D]
+    # [1, Tq, D] x [Nd, D, Td] -> [1, Nd, Tq, Td]
+    sim = torch.einsum("qtd,nsd->qnts", q_n, d_n)
+    return sim.max(dim=-1).values.sum(dim=-1).squeeze(0)  # [Nd]
+
+
+def gqr_score_cosine(
+    q: torch.Tensor,
+    docs: torch.Tensor,
+) -> torch.Tensor:
+    """Differentiable cosine similarity for a single query inside the GQR optimization loop.
+
+    Args:
+        q:    [1, D] — single query vector, may have requires_grad=True
+        docs: [Nd, D] — doc vectors
+
+    Returns:
+        [Nd] similarity scores (differentiable w.r.t. q)
+    """
+    q_n = _l2_norm(q.float())       # [1, D]
+    d_n = _l2_norm(docs.float())    # [Nd, D]
+    return (q_n @ d_n.T).squeeze(0)  # [Nd]
+
+
 def score_multi_vector(
     query_embs: list[torch.Tensor],
     doc_embs: list[torch.Tensor],

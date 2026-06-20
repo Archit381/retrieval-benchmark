@@ -83,9 +83,9 @@ class BaseEvaluator(ABC):
         ndcg = self.eval_ndcg(qrels, ranked)
 
         return {
-            "evaluator": type(self).__name__,
-            "mean_ndcg": {k: float(v.mean()) for k, v in ndcg.items()},
-            "ndcg":      ndcg,
+            "evaluator":         type(self).__name__,
+            "mean_ndcg":         {k: float(v.mean()) for k, v in ndcg.items()},
+            "ndcg":              ndcg,
             "retrieval_results": ranked,
             "similarity_matrix": sim,
         }
