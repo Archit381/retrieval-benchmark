@@ -8,6 +8,7 @@ Modular framework for benchmarking multimodal embedding models on biomedical doc
 - Saves embeddings to disk as safetensors + a manifest for reproducibility
 - Evaluates retrieval via exhaustive similarity scoring + pytrec_eval (NDCG@1/5/10)
 - Produces paper-ready comparison tables across models
+- Supports test-time query refinement (GQR gradient-based, rank/score fusion)
 
 ## Models supported
 
@@ -18,16 +19,29 @@ Modular framework for benchmarking multimodal embedding models on biomedical doc
 | `MahmoodLab/conch` | Dense (512-dim) | text + image |
 | `flaviagiammarino/pubmed-clip-vit-base-patch32` | Dense (512-dim) | text + image |
 
+## Test-time methods
+
+| Method | Class | Description |
+|---|---|---|
+| GQR | `GQRMethod` | Gradient-based query refinement guided by a feedback retriever (KL loss) |
+| Rank fusion | `AverageRankFusion` | Average per-document rank positions from two retrievers |
+| Score fusion | `AverageScoreFusion` | Softmax-normalise then average scores from two retrievers |
+
 ## Project structure
 
 ```
 src/
 ├── embedder/               # Model wrappers (ColSmol, BiomedCLIP, CONCH, PubMedCLIP)
 │   └── _base.py            # BaseEmbedder ABC — batching, resource tracking, progress
-├── embedding_factory.py    # Load model once, encode multiple sets, unload
-├── evaluation/             # Evaluators (ColSmol MaxSim, Dense cosine)
-│   └── base.py             # BaseEvaluator — rank all docs, NDCG via pytrec_eval
-├── evaluation_factory.py   # evaluate(model_type, ..., cutoffs=[1,5,10])
+├── embedding_factory.py    # EmbeddingFactory — load once, encode multiple sets, unload
+├── evaluation/
+│   ├── base.py             # BaseEvaluator — score → rank → NDCG via pytrec_eval
+│   ├── scoring.py          # score_multi_vector, score_cosine, gqr_score_* functions
+│   └── test_time/          # Test-time methods
+│       ├── base.py         # BaseTestTimeMethod ABC
+│       ├── gqr.py          # GQRMethod + plot_query_trajectory + plot_loss_curves
+│       └── fusion.py       # AverageRankFusion, AverageScoreFusion
+├── evaluation_factory.py   # evaluate(), apply_test_time_method(), register_evaluator()
 └── core/
     ├── schema.py           # EmbeddingOutput, EmbeddingMetadata (Pydantic)
     ├── manifest.py         # Manifest — metadata saved alongside embeddings
@@ -40,7 +54,9 @@ src/
 
 ```python
 from src.embedding_factory import EmbeddingFactory
-from src.evaluation_factory import evaluate
+from src.evaluation_factory import evaluate, apply_test_time_method
+from src.evaluation.test_time import GQRMethod
+from src.evaluation.scoring import gqr_score_multi_vector
 from src.core import save_artifacts, compare_ndcg
 
 # 1. Encode
@@ -65,16 +81,29 @@ save_artifacts(
     artifacts_dir="artifacts", hf_repo_id="your/dataset",
 )
 
-# 3. Evaluate
-result = evaluate(
-    model_type="colsmol",
-    query_embs=embd_out["query_image"].img_embd,
-    doc_embs=embd_out["doc"].text_embd,
-    query_ids=query_ids, doc_ids=doc_ids, qrels=qrels,
-    cutoffs=[1, 5, 10],
+# 3. Evaluate (primary + feedback)
+primary  = evaluate("colsmol",    q_embs_col,   d_embs_col,   query_ids, doc_ids, qrels)
+feedback = evaluate("biomedclip", q_embs_dense, d_embs_dense, query_ids, doc_ids, qrels)
+
+# 4. Test-time refinement
+gqr = GQRMethod(
+    primary_evaluator=ColSmolEvaluator(device="cuda"),
+    sim_func=gqr_score_multi_vector,
+    lr=5e-3, n_steps=15,
+)
+gqr_result = apply_test_time_method(
+    gqr,
+    q_embs_col, d_embs_col,
+    primary["similarity_matrix"],
+    feedback["similarity_matrix"],
+    query_ids, doc_ids, qrels,
+    plot_trajectory=True,   # PCA plot of query path in embedding space
+    plot_losses=True,       # per-query KL loss curves
+    plots_save_path="results/figures",
+    plot_query_idx=0,       # which query to visualise (default 0)
 )
 
-# 4. Compare across models
+# 5. Compare across models
 compare_ndcg(eval_results)  # paper-ready table, all cutoffs
 ```
 
@@ -84,3 +113,7 @@ Follows BEIR / GQR (arXiv:2510.05038) standard:
 - Exhaustive similarity matrix `[Nq, Nd]` — all docs ranked, no ANN approximation
 - NDCG@k computed by pytrec_eval (trec_eval reference implementation)
 - Primary metric: NDCG@5 (ViDoRe standard)
+
+---
+
+See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for how to add new embedders, evaluators, and test-time methods.
