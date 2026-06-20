@@ -54,6 +54,7 @@ def apply_test_time_method(
     query_ids: list[str],
     doc_ids: list[str],
     qrels: dict[str, dict[str, int]],
+    **kwargs: Any,
 ) -> dict:
     """Apply any test-time method given two similarity matrices.
 
@@ -66,6 +67,9 @@ def apply_test_time_method(
         query_ids:       Ordered query ID strings.
         doc_ids:         Ordered doc ID strings.
         qrels:           {query_id: {doc_id: relevance_int}}
+        **kwargs:        Extra keyword args forwarded to ``method.apply()``
+                         (e.g. ``plot_trajectory``, ``plot_query_idx``,
+                         ``trajectory_save_path`` for ``GQRMethod``).
 
     Returns:
         Result dict with the same schema as ``evaluate()``.
@@ -74,6 +78,7 @@ def apply_test_time_method(
         query_emb_main, doc_emb_main,
         sim_main, sim_feedback,
         query_ids, doc_ids, qrels,
+        **kwargs,
     )
 
 
