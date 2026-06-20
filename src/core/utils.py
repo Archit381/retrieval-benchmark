@@ -10,7 +10,7 @@ import io
 from rich.console import Console
 from rich.table import Table
 from rich import box
-from schema import EmbeddingOutput
+from src.core.schema import EmbeddingOutput
 from rich.progress import (
     Progress,
     BarColumn,
