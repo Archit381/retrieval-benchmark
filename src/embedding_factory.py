@@ -1,4 +1,4 @@
-from embedder import (
+from src.embedder import (
   BaseEmbedder,
   ColSmolEmbedder,
   BiomedCLIPEmbedder
