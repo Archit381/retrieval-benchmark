@@ -17,8 +17,10 @@ def load_multi_vector(path: str, device: str = "cpu") -> list[torch.Tensor]:
     return [flat[offsets[i] : offsets[i + 1]] for i in range(len(offsets) - 1)]
 
 
-def save_single_vector(path: str, tensor: torch.Tensor) -> None:
+def save_single_vector(path: str, tensor: torch.Tensor | list[torch.Tensor]) -> None:
     """Dense layout: emb [N, dim] float32."""
+    if isinstance(tensor, list):
+        tensor = torch.stack(tensor)
     save_file({"emb": tensor.to(torch.float32).cpu()}, path)
 
 
