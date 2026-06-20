@@ -62,14 +62,21 @@ def load_artifacts_hf(
     subfolder: str,
     device: str = "cpu",
     token: str | None = None,
+    force_download: bool = False,
 ) -> tuple[ArtifactContext, Manifest]:
     """Download artifacts from an HF dataset repo and load them.
 
     Args:
-        repo_id:   e.g. "architojha/m3-retrieve-eval"
-        subfolder: model subfolder inside the repo, e.g. "colsmol"
-        device:    torch device for loaded tensors
-        token:     HF token (needed if repo is private)
+        repo_id:        e.g. "architojha/m3-retrieve-eval"
+        subfolder:      model subfolder inside the repo, e.g. "colsmol"
+        device:         torch device for loaded tensors
+        token:          HF token (needed if repo is private)
+        force_download: re-download even if cached (use when hub has new files)
     """
-    local_dir = snapshot_download(repo_id=repo_id, repo_type="dataset", token=token)
+    local_dir = snapshot_download(
+        repo_id=repo_id,
+        repo_type="dataset",
+        token=token,
+        force_download=force_download,
+    )
     return load_artifacts(f"{local_dir}/{subfolder}", device=device)
