@@ -19,10 +19,9 @@ class BaseEvaluator(ABC):
                 ...  # return [Nq, Nd] float32 similarity matrix
     """
 
-    def __init__(self, device: str = "cpu", k: int = 10, cutoff: int = 5):
+    def __init__(self, device: str = "cpu", cutoffs: list[int] = [1, 5, 10]):
         self.device = device
-        self.k = k
-        self.cutoff = cutoff
+        self.cutoffs = cutoffs
 
     @abstractmethod
     def score(self, query_embs: Any, doc_embs: Any) -> torch.Tensor:
@@ -35,12 +34,12 @@ class BaseEvaluator(ABC):
         query_ids: list[str],
         doc_ids: list[str],
     ) -> dict[str, dict[str, float]]:
-        """Top-k from similarity matrix, keyed by actual IDs (not positions)."""
-        k_eff = min(self.k, similarity.shape[1])
-        top_vals, top_idx = torch.topk(similarity, k=k_eff, dim=-1)
+        """Rank all docs by similarity score, keyed by actual IDs."""
+        sorted_idx = torch.argsort(similarity, dim=-1, descending=True)
+        sorted_vals = torch.gather(similarity, 1, sorted_idx)
         results: dict[str, dict[str, float]] = {}
         for i, (val_row, idx_row) in enumerate(
-            zip(top_vals.cpu().tolist(), top_idx.cpu().tolist())
+            zip(sorted_vals.cpu().tolist(), sorted_idx.cpu().tolist())
         ):
             results[query_ids[i]] = {doc_ids[j]: float(v) for j, v in zip(idx_row, val_row)}
         return results
@@ -49,12 +48,19 @@ class BaseEvaluator(ABC):
         self,
         qrels: dict[str, dict[str, int]],
         retrieval_results: dict[str, dict[str, float]],
-    ) -> np.ndarray:
-        """NDCG@cutoff via pytrec_eval. Returns per-query array."""
-        metric_key = f"ndcg_cut_{self.cutoff}"
-        evaluator = pytrec_eval.RelevanceEvaluator(qrels, {f"ndcg_cut.{self.cutoff}"})
+    ) -> dict[int, np.ndarray]:
+        """NDCG@k for all cutoffs in one pytrec_eval pass.
+
+        Returns {cutoff: per_query_ndcg_array} aligned to qrels query order.
+        """
+        measures = {f"ndcg_cut.{k}" for k in self.cutoffs}
+        evaluator = pytrec_eval.RelevanceEvaluator(qrels, measures)
         scores = evaluator.evaluate(retrieval_results)
-        return np.array([v[metric_key] for v in scores.values()])
+        query_order = [qid for qid in qrels if qid in scores]
+        return {
+            k: np.array([scores[qid][f"ndcg_cut_{k}"] for qid in query_order])
+            for k in self.cutoffs
+        }
 
     def run(
         self,
@@ -78,8 +84,8 @@ class BaseEvaluator(ABC):
 
         return {
             "evaluator": type(self).__name__,
-            "mean_ndcg": float(ndcg.mean()),
-            "ndcg": ndcg,
+            "mean_ndcg": {k: float(v.mean()) for k, v in ndcg.items()},
+            "ndcg":      ndcg,
             "retrieval_results": ranked,
             "similarity_matrix": sim,
         }

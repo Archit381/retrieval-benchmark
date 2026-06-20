@@ -21,29 +21,27 @@ def evaluate(
     doc_ids: list[str],
     qrels: dict[str, dict[str, int]],
     device: str = "cpu",
-    k: int = 10,
-    cutoff: int = 5,
+    cutoffs: list[int] = [1, 5, 10],
 ) -> dict:
     """Run retrieval evaluation for a given model type.
 
     Args:
-        model_type: one of "colsmol", "biomedclip", "conch"
+        model_type: one of "colsmol", "biomedclip", "conch", "pubmedclip"
         query_embs: embeddings for queries
         doc_embs:   embeddings for docs
         query_ids:  ordered query ID strings
         doc_ids:    ordered doc ID strings
         qrels:      {query_id: {doc_id: relevance_int}}
         device:     torch device string
-        k:          top-k docs to retrieve
-        cutoff:     NDCG cutoff
+        cutoffs:    list of k values for NDCG@k (e.g. [1, 5, 10])
 
     Returns:
-        dict with mean_ndcg, ndcg, retrieval_results, similarity_matrix
+        dict with mean_ndcg {k: float}, ndcg {k: np.ndarray}, retrieval_results, similarity_matrix
     """
     if model_type not in _EVALUATOR_MAP:
         raise ValueError(f"Unknown model_type '{model_type}'. Choose from: {list(_EVALUATOR_MAP)}")
     cls = _EVALUATOR_MAP[model_type]
-    return cls(device=device, k=k, cutoff=cutoff).run(query_embs, doc_embs, query_ids, doc_ids, qrels)
+    return cls(device=device, cutoffs=cutoffs).run(query_embs, doc_embs, query_ids, doc_ids, qrels)
 
 
 def register_evaluator(model_type: str, cls) -> None:

@@ -144,61 +144,67 @@ _PRETTY_NAMES: dict[str, str] = {
 
 def compare_ndcg(
     eval_results: dict[str, dict],
-    cutoff: int = 5,
     pretty_names: dict[str, str] | None = None,
     save_dir: str | None = None,
 ) -> "Any":
-    """Paper-ready NDCG comparison table.
+    """Paper-ready NDCG comparison table across all cutoffs.
 
     Args:
         eval_results:  {model_type: result_dict} from evaluation_factory.evaluate()
-        cutoff:        NDCG cutoff (label only)
         pretty_names:  optional display name overrides keyed by model_type
         save_dir:      if set, writes ndcg.tex here
 
     Returns:
-        pandas DataFrame with one row per model
+        pandas DataFrame — rows=models, columns=nDCG@k for each cutoff
     """
     import os
     import pandas as pd
     from IPython.display import display
 
-    names  = {**_PRETTY_NAMES, **(pretty_names or {})}
-    metric = f"nDCG@{cutoff}"
+    names = {**_PRETTY_NAMES, **(pretty_names or {})}
 
-    per_query: dict[str, np.ndarray] = {
-        names.get(mt, mt): np.asarray(res["ndcg"])
-        for mt, res in eval_results.items()
-    }
-    model_order = sorted(per_query, key=lambda m: per_query[m].mean(), reverse=True)
-    best_model  = model_order[0]
-    best_mean   = float(per_query[best_model].mean())
+    # collect all cutoffs present in results (sorted)
+    cutoffs: list[int] = sorted(next(iter(eval_results.values()))["ndcg"].keys())
 
     def fmt_cell(val: float, base: float) -> str:
         gain = 100.0 * (val - base) / max(base, 1e-9)
         return f"{val:.3f} ({gain:+.1f}\\%)"
 
-    ndcg_data = {
-        m: (f"{per_query[m].mean():.3f}" if m == best_model
-            else fmt_cell(float(per_query[m].mean()), best_mean))
-        for m in model_order
+    # sort models by mean NDCG across all cutoffs
+    model_means: dict[str, float] = {
+        mt: float(np.mean([np.asarray(res["ndcg"][k]).mean() for k in cutoffs]))
+        for mt, res in eval_results.items()
     }
+    model_order = sorted(model_means, key=lambda m: model_means[m], reverse=True)
+    best_model  = model_order[0]
 
-    ndcg_df = pd.DataFrame(ndcg_data, index=[metric]).T
+    rows = {}
+    for mt in model_order:
+        pretty = names.get(mt, mt)
+        res    = eval_results[mt]
+        row    = {}
+        for k in cutoffs:
+            val  = float(np.asarray(res["ndcg"][k]).mean())
+            best = float(np.asarray(eval_results[best_model]["ndcg"][k]).mean())
+            row[f"nDCG@{k}"] = f"{val:.3f}" if mt == best_model else fmt_cell(val, best)
+        rows[pretty] = row
+
+    ndcg_df = pd.DataFrame(rows).T
     ndcg_df.index.name = "Model"
 
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
+        cols = " + ".join(f"nDCG@{k}" for k in cutoffs)
         tex = ndcg_df.to_latex(
             escape=False,
-            column_format="l" + "r" * len(ndcg_df.columns),
-            caption=f"{metric} scores. Percentages are relative gains over best model ({best_model}).",
-            label=f"tab:ndcg{cutoff}",
+            column_format="l" + "r" * len(cutoffs),
+            caption=f"{cols}. Percentages are relative gains over best model ({names.get(best_model, best_model)}).",
+            label="tab:ndcg",
         )
         with open(f"{save_dir}/ndcg.tex", "w") as f:
             f.write(tex)
 
-    print(f"\n================ {metric} ================")
+    print(f"\n================ NDCG @ {cutoffs} ================")
     display(ndcg_df)
     return ndcg_df
 
